@@ -1,0 +1,394 @@
+<html>
+<head>
+    <title>Playground</title>
+	<link rel='stylesheet' type='text/css' href='css/style.css' />
+    <script src="lib/js/three.js"></script>
+    <script src="lib/js/OrbitControls.js"></script>
+    <script src="lib/js/loaders/MTLLoader.js"></script>
+    <script src="lib/js/loaders/OBJLoader.js"></script>
+    <script src="showcase.js"></script>
+</head>
+<body>
+	<div id='settings'>
+		
+		<div id="objs_navigation">
+			<a href="#" id="objs_navigation_prev" hidden="true"><</a>
+			<h2 id="current_obj_desc"></h2>
+			<a href="#" id="objs_navigation_next" hidden="true">></a>
+		</div>
+		<div id="mtls_ui">
+			<ul id="mtls_ui_list" class="mtls_ui_list">
+			</ul>
+		</div>
+	</div>
+<script>
+    var showcaseURL = 'demo/data_demo.js';
+    var showcaseJSON;
+
+    var scene;
+    var camera;
+    var controls;
+
+    var objects = {};
+    var mtls = {};
+    var combinations = {};
+    var order = [];
+    var current_order = 0;
+
+    var object_key;
+    var mtl_key;
+
+    controller('start');
+    function controller(finishMsg){
+        switch (finishMsg) {
+            case 'start':
+                create_render();
+                load_json('json_finish');
+                break;
+            case 'json_finish':
+                load_first1_ojb('first1_obj_finish');
+                break;
+            case 'first1_obj_finish':
+                load_scene('scene_finish');
+                break;
+            case 'scene_finish':
+                controls_update('controls_update_finish') ;
+                break;
+            case 'controls_update_finish':
+                load_first1_mtl('first1_mtl_finish');
+                break;
+            case 'first1_mtl_finish':
+                load_first1_mtls('first1_mtls_finish');
+                break;
+            case 'first1_mtls_finish':
+                update_mtls_ui_c('mtls_ui_finish');
+                break;
+            case 'mtls_ui_finish':
+                load_second_objs_mtls('load_second_objs_mtls_finish');
+                break;
+            case 'load_second_objs_mtls_finish':
+                load_all_objs_mtsl('load_all_objs_mtsl_finish');
+        }
+
+    }
+
+    function create_render(){
+        // create_render
+
+        container = document.createElement( 'div' );
+        document.body.appendChild( container );
+
+        var loadScene = ShowcaseGL.util.createLoadScene();
+
+        camera = loadScene.camera;
+        scene = loadScene.scene;
+
+        renderer = new THREE.WebGLRenderer( { antialias: true } );
+        renderer.setSize(  window.innerWidth, window.innerHeight );
+        renderer.domElement.style.position = "relative";
+        container.appendChild( renderer.domElement );
+
+        renderer.gammaInput = true;
+        renderer.gammaOutput = true;
+        renderer.physicallyBasedShading = true;
+
+        function onWindowResize() {
+
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize( window.innerWidth, window.innerHeight );
+            render();
+        }
+
+        window.addEventListener( 'resize', onWindowResize, false );
+
+        // control
+
+        controls = new THREE.OrbitControls( camera );
+        controls.addEventListener( 'change', render );
+
+        controls.autoRotate = true;
+        controls.autoRotateSpeed = 3.0;
+        controls.maxPolarAngle = Math.PI/2;
+
+
+        // start animation
+        animate();
+
+    }
+    function load_json(finishMsg){
+        function callbackFinish(json){
+            showcaseJSON = json;
+            order = json.order;
+            current_order = 0;
+            combinations = json.combinations;
+            controller(finishMsg);
+        }
+        ShowcaseGL.util.$get_json(showcaseURL,callbackFinish);
+    }
+    function load_scene(finishMsg){
+        function callbackFinished( result ) {
+
+            camera = result.currentCamera;
+            controls.object = camera;
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            scene = result.scene;
+            camera.lookAt( scene.position );
+
+            scene.add(objects[object_key]);
+
+            var desc = showcaseJSON.objs[object_key].desc;
+            var tag = document.getElementById('current_obj_desc')
+            tag.innerHTML = desc;
+
+            controller(finishMsg);
+        }
+
+        var loader = new THREE.SceneLoader();
+        loader.load( showcaseJSON.scene.url, callbackFinished );
+    }
+
+    function controls_update(finishMsg){
+        controls.autoRotateSpeed = showcaseJSON.scene.rotation_speed;
+        if(controls.autoRotateSpeed != 0)
+            controls.autoRotate = true;
+        controls.maxPolarAngle = Math.PI/2;
+        controls.minDistance = showcaseJSON.scene.min_distanse;
+        controls.maxDistance = showcaseJSON.scene.max_distanse;
+        controller(finishMsg);
+    }
+
+    function load_first1_ojb(finishMsg){
+        function callbackFinish(obj_key){
+            object_key = obj_key;
+
+            controller('first1_obj_finish');
+        }
+        var key = order[0];
+        load_obj(key,callbackFinish);
+    }
+
+    function load_first1_mtl(finishMsg){
+        function callbackFinish(key){
+            apply_mtl_current_obj(key);
+            controller(finishMsg);
+        }
+        var obj_json =  showcaseJSON.objs[object_key];
+        if(obj_json.default_mtl == undefined){
+            controller(finishMsg);
+        }
+        else{
+            load_mtl(obj_json.default_mtl,callbackFinish);
+        }
+
+    }
+
+    function load_first1_mtls(finishMsg){
+        function callbackFinish(key){
+           controller(finishMsg);
+        }
+        load_mtls(object_key,callbackFinish)
+    }
+
+    function update_mtls_ui_c(finishMsg)
+    {
+        update_mtls_ui();
+        controller(finishMsg);
+    }
+
+    function load_second_objs_mtls(finishMsg){
+        function callbackFinish(obj_key){
+            update_navigation(0);
+            controller(finishMsg);
+        }
+        var obj_key = order[1];
+        if(obj_key != undefined)
+            load_obj_mtls(obj_key,callbackFinish);
+        else
+            controller(finishMsg);
+    }
+    function load_all_objs_mtsl(finishMsg){
+        var counter = order.length;
+        function callbackFinish(index){
+            if(index - 1 == current_order | index + 1 == current_order)
+                update_navigation(current_order);
+            -- counter;
+            if(counter < 1)
+                controller(finishMsg);
+        }
+        for(index in order){
+            var obj_key = order[index];
+            if(objects[obj_key] != undefined)
+                -- counter;
+            else{
+                load_obj_mtls(obj_key,function(){callbackFinish(index)})
+            }
+        }
+    }
+//----------------------------------------------------
+    function mtls_ui_onClick(event){
+        var mtls_key_c = event.target.getAttribute('mtls_key');
+        apply_mtl_current_obj(mtls_key_c);
+    }
+    function objs_navigation_onClick(event){
+        var order_index = parseFloat(event.target.getAttribute('order_index'));
+        var obj_key = order[order_index];
+        update_obj_on_scene(obj_key)
+        update_mtls_ui();
+        update_navigation(order_index);
+    }
+//----------------------------------------------------
+    function update_navigation(order_index){
+        function update_tag(tag,order_index)
+        {
+            var obj_key = order[order_index];
+            if(objects[obj_key] == undefined){
+                tag.setAttribute('hidden','true');
+            }
+            else{
+                tag.setAttribute('order_index',order_index);
+                tag.removeAttribute('hidden')
+                tag.addEventListener('click',objs_navigation_onClick,false);
+            }
+        }
+        var next_tag = document.getElementById('objs_navigation_next');
+        var prev_tag = document.getElementById('objs_navigation_prev');
+        update_tag(next_tag,order_index + 1);
+        update_tag(prev_tag,order_index - 1);
+        current_order = order_index;
+    }
+    function update_mtls_ui()
+    {
+
+        var obj = showcaseJSON.objs[object_key];
+        var list = document.getElementById('mtls_ui_list');
+        list.innerHTML = '';
+        for(mtl_key_counter in obj.mtls)
+        {
+            mtl_key_c = obj.mtls[mtl_key_counter];
+            var element = document.createElement('li');
+            element.setAttribute('mtls_key',mtl_key_c);
+            if(mtl_key_c == mtl_key)
+                element.setAttribute("class",'ui_mtls_list_selected');
+            else
+                element.setAttribute("class",'ui_mtls_list_item');
+            var mtl = showcaseJSON.mtls[mtl_key_c];
+            var text = document.createTextNode(mtl.desc);
+            element.appendChild(text);
+            element.addEventListener('click',mtls_ui_onClick,false);
+            list.appendChild(element);
+        }
+    }
+
+    function load_obj_mtls(obj_key,callback){
+        var counter = 2;
+        var obj = showcaseJSON.objs[obj_key];
+        function callbackFinish(){
+            -- counter;
+            if(counter < 1){
+                if(obj.default_mtl != undefined)
+                    apply_mtl(obj_key,obj.default_mtl);
+                callback(obj_key);
+            }
+        }
+        load_obj(obj_key,callbackFinish);
+        load_mtls(obj_key,callbackFinish);
+    }
+
+    function load_obj(obj_key,callback){
+        function callbackFinish(obj){
+            objects[obj_key] = obj;
+            callback(obj_key);
+        }
+        if (objects[obj_key] != undefined)
+        {
+            callback(obj_key);
+        }
+        else{
+            var loader = new THREE.OBJLoader();
+            var url = showcaseJSON.objs[obj_key].url;
+            loader.load(url, callbackFinish);
+        }
+    }
+    function load_mtls(obj_key,callback){
+        var obj = showcaseJSON.objs[obj_key];
+        var count = obj.mtls.length;
+        function callbackFinish(key){
+            -- count;
+            if(count < 1)
+                callback(key);
+        }
+        for(mtl_counter in obj.mtls)
+            load_mtl(obj.mtls[mtl_counter],callbackFinish);
+    }
+    function load_mtl(key,callback)
+    {
+        function callbackFinish(materialsCreator){
+            mtls[key] = materialsCreator;
+            callback(key);
+        }
+        if (mtls[key] != undefined){
+            callback(key);
+            return;
+        }
+        var url = showcaseJSON.mtls[key].url;
+        var loader1 = new THREE.MTLLoader()
+        loader1.load(url,callbackFinish)
+    }
+
+    function apply_mtl(obj_key,mtl_key){
+        var object = objects[obj_key];
+        var materialsCreator = mtls[mtl_key];
+        object.traverse( function ( object ) {
+
+            if ( object instanceof THREE.Mesh ) {
+
+                if ( object.material.name ) {
+
+                    var material = materialsCreator.create( object.material.name );
+
+                    if ( material ) object.material = material;
+
+                }
+
+            }
+
+        } );
+
+    }
+
+    function apply_mtl_current_obj(c_mtl_key){
+        mtl_key = c_mtl_key;
+        apply_mtl(object_key,mtl_key);
+    }
+
+    function update_obj_on_scene(obj_key){
+        scene.remove(objects[object_key]);
+        scene.add(objects[obj_key]);
+        object_key = obj_key;
+        var desc = showcaseJSON.objs[obj_key].desc;
+        var tag = document.getElementById('current_obj_desc')
+        tag.innerHTML = desc;
+    }
+
+//----------------------------------------------------
+    function animate() {
+
+        requestAnimationFrame( animate );
+        controls.update();
+        renderer.render( scene, camera );
+
+    }
+
+    function render() {
+
+        renderer.render( scene, camera );
+
+    }
+
+</script>
+
+
+</body>
+</html>
